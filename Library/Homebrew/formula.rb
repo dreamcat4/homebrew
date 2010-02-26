@@ -1,5 +1,6 @@
 require 'download_strategy'
 require 'fileutils'
+require 'launchd_plist'
 
 class FormulaUnavailableError <RuntimeError
   def initialize name
@@ -96,6 +97,9 @@ class Formula
     CHECKSUM_TYPES.each do |type|
       set_instance_variable type
     end
+
+    set_instance_variable 'launchd'
+    @launchd ||= []
 
     @downloader=download_strategy.new url, name, version, specs
   end
@@ -218,6 +222,20 @@ class Formula
         ENV['HOMEBREW_DEBUG_INSTALL'] = name
         interactive_shell
       end
+    end
+  end
+
+  def plist name=nil, program_args*, &blk
+    name = "com.github.homebrew.#{class.to_s.snake_case}" unless name
+    LaunchdPlist.new prefix, name, program_args*, &blk
+  end
+
+  def link_plists
+    HOMEBREW_LAUNCHDAEMONS.mkpath
+    f.launchd.each do |plist|
+      plist.finalize
+      FileUtils.link plist.path, "#{HOMEBREW_LAUNCHDAEMONS}/#{plist.name}"
+      puts "Launchd plist #{plist.name} installed to #{HOMEBREW_LAUNCHDAEMONS}"
     end
   end
 

@@ -101,6 +101,7 @@ def install f
           f.prefix.install file rescue nil
           (f.prefix+file).chmod 0644 rescue nil
         end
+        f.link_plists
         build_time = Time.now-beginning
       end
     end

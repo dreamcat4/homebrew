@@ -22,6 +22,7 @@ end
 
 HOMEBREW_PREFIX = Pathname.new(HOMEBREW_BREW_FILE).dirname.parent # Where we link under
 HOMEBREW_REPOSITORY = Pathname.new(HOMEBREW_BREW_FILE).realpath.dirname.parent # Where .git is found
+HOMEBREW_LAUNCHDAEMONS = Pathname.new(HOMEBREW_PREFIX+"/Library/LaunchDaemons") # Where we link plists
 
 # Where we store built products; /usr/local/Cellar if it exists,
 # otherwise a Cellar relative to the Repository.

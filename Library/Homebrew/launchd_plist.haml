@@ -1,0 +1,60 @@
+-# Copyright 2009 Max Howell and other contributors.
+-# 
+-# Redistribution and use in source and binary forms, with or without
+-# modification, are permitted provided that the following conditions
+-# are met:
+-# 
+-# 1. Redistributions of source code must retain the above copyright
+-#    notice, this list of conditions and the following disclaimer.
+-# 2. Redistributions in binary form must reproduce the above copyright
+-#    notice, this list of conditions and the following disclaimer in the
+-#    documentation and/or other materials provided with the distribution.
+-# 
+-# THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+-# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+-# OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+-# IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+-# NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+-# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+-# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+-# THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-#
+!!! XML UTF-8
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN"
+"http://www.apple.com/DTDs/PropertyList-1.0.dtd" >
+%plist{ :version => '1.0' }
+	%dict
+		- p = Proc.new do |data, block| 
+			- data.each_pair do |k,v|
+				- raise "Invalid input. Hash: #{data.inspect} can only contain keys of type Symbol or String. Found key #{k.inspect}, of type: \"#{k.class}\"" unless [Symbol,String].include? k.class
+				- case v
+					- when TrueClass, FalseClass
+						%key #{k}
+						<#{v}/>
+					- when String
+						%key #{k}
+						%string #{v}
+					- when Fixnum
+						%key #{k}
+						%integer #{v}
+					- when Array
+						%key #{k}
+						%array
+							- v.each do |e|
+								- case e
+									- when String
+										%string #{e}
+									- when Hash
+										%dict
+											- tab_up ; block.call(e, block) ; tab_down
+									- else
+										- raise "Invalid input. Array: #{v.inspect} can only contain elements of type String (<string>) or Hash (<dict>). Found element: #{e.inspect} of type: \"#{e.class}\""
+					- when Hash
+						%key #{k}
+						%dict
+							- tab_up ; block.call(v, block) ; tab_down
+					- else
+						- raise "Invalid input. Hash: #{data.inspect} can only contain values of type true, false, String (<string>) Fixnum (<integer>) Array (<array>) or Hash (<dict>). Found value: #{v.inspect} of type: \"#{v.class}\""
+		- p.call( @xml_keys, p)

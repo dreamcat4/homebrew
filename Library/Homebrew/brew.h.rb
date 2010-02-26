@@ -294,6 +294,7 @@ def prune
 
   dirs=Array.new
   paths=%w[bin sbin etc lib include share].collect {|d| HOMEBREW_PREFIX+d}
+  paths << HOMEBREW_LAUNCHDAEMONS
 
   paths.each do |path|
     path.find do |path|

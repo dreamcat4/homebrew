@@ -1,0 +1,65 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN"
+"http://www.apple.com/DTDs/PropertyList-1.0.dtd" >
+<plist version='1.0'>
+  <dict>
+    <key>Label</key>
+    <string>com.howbrew.haml</string>
+    <key>Sockets</key>
+    <dict>
+      <key>direct</key>
+      <dict>
+        <key>Bonjour</key>
+        <array>
+          <string>smb</string>
+        </array>
+        <key>SockServiceName</key>
+        <string>netbios-ssn</string>
+        <key>SockFamily</key>
+        <string>IPv4</string>
+      </dict>
+      <key>netbios</key>
+      <dict>
+        <key>SockServiceName</key>
+        <string>netbios-ssn</string>
+        <key>SockFamily</key>
+        <string>IPv4</string>
+      </dict>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <dict>
+      <key>Minute</key>
+      <integer>15</integer>
+      <key>Weekday</key>
+      <integer>6</integer>
+      <key>Hour</key>
+      <integer>3</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>RUBY_LIB</key>
+      <string>/usr/lib/ruby/site_ruby/1.8</string>
+      <key>PATH</key>
+      <string>/sbin:/usr/sbin:/bin:/usr/bin</string>
+    </dict>
+    <key>WatchPaths</key>
+    <array>
+      <string>/Volumes/CD ROM</string>
+      <string>/var/run</string>
+    </array>
+    <key>ProgramArguments</key>
+    <array>
+      <string>bash</string>
+      <string>-l</string>
+      <string>-c</string>
+      <string>/usr/bin/env</string>
+      <string>ruby</string>
+      <string>-e</string>
+      <string>puts RUBY_VERSION</string>
+    </array>
+    <key>Debug</key>
+    <true/>
+  </dict>
+</plist>
