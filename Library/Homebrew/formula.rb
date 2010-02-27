@@ -225,9 +225,9 @@ class Formula
     end
   end
 
-  def plist name=nil, program_args*, &blk
+  def plist name=nil, *program_args, &blk
     name = "com.github.homebrew.#{class.to_s.snake_case}" unless name
-    LaunchdPlist.new prefix, name, program_args*, &blk
+    LaunchdPlist.new prefix, name, *program_args, &blk
   end
 
   def link_plists

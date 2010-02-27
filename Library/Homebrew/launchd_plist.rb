@@ -21,6 +21,42 @@
 #  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
+
+require 'global'
+module BrewMixins
+  # This method was found in formula.rb, and it also requires global.rb
+  # perhaps we can get hold of this system() method a better way, dunno
+  def system cmd, *args
+    ohai "#{cmd} #{args*' '}".strip
+
+    if ARGV.verbose?
+      safe_system cmd, *args
+    else
+      rd, wr = IO.pipe
+      pid = fork do
+        rd.close
+        $stdout.reopen wr
+        $stderr.reopen wr
+        exec(cmd, *args) rescue nil
+        exit! 1 # never gets here unless exec threw or failed
+      end
+      wr.close
+      out = ''
+      out << rd.read until rd.eof?
+      Process.wait
+      unless $?.success?
+        puts out
+        raise
+      end
+    end
+  rescue SystemCallError
+    # usually because exec could not be find the command that was requested
+    raise
+  rescue
+    raise BuildError.new(cmd, args, $?)
+  end
+end
+
 class String
   def camelcase
     str = self.dup.capitalize.gsub(/[-_.\s]([a-zA-Z0-9])/) { $1.upcase } \
@@ -28,15 +64,92 @@ class String
   end
 
   def snake_case
-    str = self.dup.gsub!(/[A-Z]/) {|s| "_" + s}
-    str.downcase!.sub!(/^\_/, "")
-    str
+    str = self.dup.gsub(/[A-Z]/) {|s| "_" + s}
+    str = str.downcase.sub(/^\_/, "")
   end
 end
 
-class LaunchdPlist < Object
+require 'libxml-bindings'
+class LibxmlLaunchdPlistParser
+  include ::BrewMixins
 
-  def initialize path_prefix, plist_str, program_args*, &blk
+  def initialize filename, *args, &blk
+    @filename = filename
+    raise "Can't find filename: #{@filename}" unless File.exists? @filename
+    validate
+  end
+
+  def validate
+    system "plutil #{@filename}"
+  end
+
+  def tree_hash n
+    hash = {}
+    n_xml_keys = n.nodes["key"]
+    n_xml_keys.each do |n|
+      k = n.inner_xml
+      vnode = n.next
+      case vnode.name
+      when "true", "false"
+        hash[k] = eval(vnode.name)
+      when "string"
+        hash[k] = vnode.inner_xml
+      when "integer"
+        hash[k] = vnode.inner_xml.to_i
+      when "array"
+        hash[k] = tree_array(vnode)
+      when "dict"
+        hash[k] = tree_hash(vnode)
+      else
+        raise "Unsupported / not recognized plist key: #{vnode.name}"
+      end
+    end
+    return hash
+  end
+
+  def tree_array n
+    array = []
+    n.children.each do |node|
+      case node.name
+      when "true", "false"
+        array << eval(node.name)
+      when "string"
+        array << node.inner_xml
+      when "integer"
+        array << node.inner_xml.to_i
+      when "array"
+        array << tree_array(node)
+      when "dict"
+        array << tree_hash(node)
+      else
+        raise "Unsupported / not recognized plist key: #{vnode.name}"
+      end
+    end
+    return array
+  end
+
+  def parse_launchd_plist
+    ::LibXML::XML.default_keep_blanks = false
+    @string = File.read(@filename)
+    @doc = @string.to_xmldoc
+    @doc.strip!
+    @root = @doc.node["/plist/dict"]
+    tree_hash @root
+  end
+
+  def filename
+    @filename
+  end
+
+  def plist_struct
+    @plist_struct ||= parse_launchd_plist
+  end
+end
+
+class LaunchdPlist
+  include ::BrewMixins
+
+  def initialize path_prefix, plist_str, *program_args, &blk
     plist_str << ".plist" unless plist_str =~ /\.plist$/
 
     @filename = nil
@@ -63,59 +176,38 @@ class LaunchdPlist < Object
     raise "Not enough information to generat plist: \"#{@filename}\" - No program arguments given" unless @program_arguments    
   end
 
-  def method_missing(symbol, *args)
-    # Set an attribute based on the missing method.  If you pass an argument, we'll use that
-    # to set the attribute values.  Otherwise, we'll wind up just returning the attribute
-    attrs = Chef::Node::Attribute.new(@attribute, @default_attrs, @override_attrs)
-    attrs.send(symbol, *args)
-  end
-  def method_missing(method_symbol, *args, &block)
-      # resource call route.
-      method_name = method_symbol.to_s
-      rname = convert_to_class_name(method_name)
-      resource.instance_eval(&block) if block
-    end
-  end
+  # def method_missing(symbol, *args)
+  #   # Set an attribute based on the missing method.  If you pass an argument, we'll use that
+  #   # to set the attribute values.  Otherwise, we'll wind up just returning the attribute
+  #   attrs = Chef::Node::Attribute.new(@attribute, @default_attrs, @override_attrs)
+  #   attrs.send(symbol, *args)
+  # end
+  # def method_missing(method_symbol, *args, &block)
+  #     # resource call route.
+  #     method_name = method_symbol.to_s
+  #     rname = convert_to_class_name(method_name)
+  #     resource.instance_eval(&block) if block
+  #   end
+  # end
 
-  def validate
-    # replace this with homebrew's system() call
-    `plutil #{PLIST_FILENAME}`
-    # capture stdout, stderr
-    unless $?.exitstatus == 0
-      # raise plutil error with the stdout, stderr from above
-    end
-  end
-
-  class LaunchdPlistStructs
-    # methods for checking, validating, and creating 
-    # calenderintervals, watchpaths, listeners, socket, etc
-    # and putting them into their nested hash structures
-  end
+  # class LaunchdPlistStructs
+  #   # methods for checking, validating, and creating
+  #   # calenderintervals, watchpaths, listeners, socket, etc
+  #   # and putting them into their nested hash structures
+  # end
 
   def eval_plist_block &blk
     # include methods for setting the filename, etc
+    # read existing from @xml_keys, to load up any existing instance vars
     instance_eval blk
-  end
-
-  def override_plist_keys?
-    return true unless @label == @filename.match(/^.*\/(.*)\.plist$/)[1]
-    vars = self.instance_variables - ["@filename","@label","@shortname","@block","@xml_keys"]
-    return true unless vars.empty?
-  end
-
-  class LibxmlPlistParser
-    # implement plist loading here
   end
 
   def finalize
     if File.exists? @filename
       if override_plist_keys?
-        require 'rubygems'
-        system("gem install libxml-bindings") unless Gem.available? "libxml-bindings"
-        require 'libxml-bindings'
-        #     parse plist xml -> complete nested Hash of @xml_keys
-        #     override any keys which were set by our formula
-        #     generate xml, write out (overwriting current file)
+        @xml_keys = ::LibxmlLaunchdPlistParser.new(@filename).plist_struct
+        eval_plist_block &@block if @block
+        write_plist
       end
     else
       write_plist
@@ -123,6 +215,12 @@ class LaunchdPlist < Object
     validate
   end
   
+  def override_plist_keys?
+    return true unless @label == @filename.match(/^.*\/(.*)\.plist$/)[1]
+    vars = self.instance_variables - ["@filename","@label","@shortname","@block","@xml_keys"]
+    return true unless vars.empty?
+  end
+
   def write_plist
     require 'rubygems'
     system("gem install haml") unless Gem.available? "haml"
@@ -132,6 +230,10 @@ class LaunchdPlist < Object
     File.open(@filename,'w') do |o|
       o << rendered_xml_output
     end
+  end
+
+  def validate
+    system "plutil #{@filename}"
   end
 end
 

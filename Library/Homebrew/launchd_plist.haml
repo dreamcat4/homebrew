@@ -44,8 +44,12 @@
 						%array
 							- v.each do |e|
 								- case e
+									- when TrueClass, FalseClass
+										<#{v}/>
 									- when String
 										%string #{e}
+									- when Fixnum
+										%integer #{v}
 									- when Hash
 										%dict
 											- tab_up ; block.call(e, block) ; tab_down
