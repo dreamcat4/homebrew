@@ -69,9 +69,62 @@ class String
   end
 end
 
+module LaunchdPlistStructs
+  # methods for checking, validating, and creating
+  # calenderintervals, watchpaths, listeners, socket, etc
+  # and putting them into their nested hash structures
+
+  inetdCompatibility
+  KeepAlive
+  EnvironmentVariables
+  StartCalendarInterval
+  SoftResourceLimits, HardResourceLimits
+  MachServices
+  Sockets
+
+  def classes_for_key_type
+    {
+      :string => [String], :bool => [TrueClass, FalseClass], :integer => [Fixnum], :array_of_strings => [Array]
+    }
+  end
+
+  def valid_keys
+    {
+      :string => %w[Label UserName GroupName LimitLoadToSessionType Program RootDirectory WorkingDirectory StandardInPath StandardOutPath StandardErrorPath],
+      :bool => %w[Disabled EnableGlobbing EnableTransactions OnDemand RunAtLoad InitGroups StartOnMount Debug WaitForDebugger AbandonProcessGroup HopefullyExitsFirst HopefullyExitsLast LowPriorityIO LaunchOnlyOnce],
+      :integer => %w[Umask TimeOut ExitTimeOut ThrottleInterval StartInterval Nice],
+      :array_of_strings => %w[LimitLoadToHosts LimitLoadFromHosts ProgramArguments WatchPaths QueueDirectories]
+    }
+  end
+
+  def method_missing method_symbol, *args, &block
+    valid_keys.each do |key_type, valid_keys_of_those_type|
+      if valid_keys_of_those_type.include?(method_symbol.to_s.camelcase)
+        return eval("set_or_return #{key_type} method_symbol.to_s.camelcase, *args, &blk")
+      end
+    end
+  end
+
+  def validate_value key_type, key, value
+    unless classes_for_key_type[key_type].include? value.class
+      raise "Key: #{key}, value: #{value.inspect} is of type #{value.class}. Should be: #{classes_for_key_type[key_type].join ", "}"
+    end
+  end
+
+  def set_or_return key_type, key, value
+    if value
+      validate_value key_type, key, value
+      @xml_keys[key] = value
+    else
+      @xml_keys[key]
+    end
+  end
+end
+
 require 'libxml-bindings'
-class LibxmlLaunchdPlistParser
+class LaunchdLibxmlPlistParser
   include ::BrewMixins
+  include ::LaunchdPlistStructs
 
   def initialize filename, *args, &blk
     @filename = filename
@@ -175,26 +228,6 @@ class LaunchdPlist
     eval_plist_block &@block if @block
     raise "Not enough information to generat plist: \"#{@filename}\" - No program arguments given" unless @program_arguments    
   end
-
-  # def method_missing(symbol, *args)
-  #   # Set an attribute based on the missing method.  If you pass an argument, we'll use that
-  #   # to set the attribute values.  Otherwise, we'll wind up just returning the attribute
-  #   attrs = Chef::Node::Attribute.new(@attribute, @default_attrs, @override_attrs)
-  #   attrs.send(symbol, *args)
-  # end
-  # def method_missing(method_symbol, *args, &block)
-  #     # resource call route.
-  #     method_name = method_symbol.to_s
-  #     rname = convert_to_class_name(method_name)
-  #     resource.instance_eval(&block) if block
-  #   end
-  # end
-
-  # class LaunchdPlistStructs
-  #   # methods for checking, validating, and creating
-  #   # calenderintervals, watchpaths, listeners, socket, etc
-  #   # and putting them into their nested hash structures
-  # end
 
   def eval_plist_block &blk
     # include methods for setting the filename, etc
