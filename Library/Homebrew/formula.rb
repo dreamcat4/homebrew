@@ -98,8 +98,8 @@ class Formula
       set_instance_variable type
     end
 
-    set_instance_variable 'launchd'
-    @launchd ||= []
+    set_instance_variable 'launchd_plists'
+    @launchd_plists ||= []
 
     @downloader=download_strategy.new url, name, version, specs
   end
@@ -227,12 +227,12 @@ class Formula
 
   def plist name=nil, *program_args, &blk
     name = "com.github.homebrew.#{class.to_s.snake_case}" unless name
-    LaunchdPlist.new prefix, name, *program_args, &blk
+    @launchd_plists << LaunchdPlist.new(prefix, name, *program_args, &blk)
   end
 
   def link_plists
     HOMEBREW_LAUNCHDAEMONS.mkpath
-    f.launchd.each do |plist|
+    f.launchd_plists.each do |plist|
       plist.finalize
       FileUtils.link plist.path, "#{HOMEBREW_LAUNCHDAEMONS}/#{plist.name}"
       puts "Launchd plist #{plist.name} installed to #{HOMEBREW_LAUNCHDAEMONS}"
