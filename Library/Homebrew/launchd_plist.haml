@@ -42,7 +42,7 @@
 					- when Array
 						%key #{k}
 						%array
-							- v.each do |e|
+							- v.compact.each do |e|
 								- case e
 									- when TrueClass, FalseClass
 										<#{v}/>
@@ -61,4 +61,4 @@
 							- tab_up ; block.call(v, block) ; tab_down
 					- else
 						- raise "Invalid input. Hash: #{data.inspect} can only contain values of type true, false, String (<string>) Fixnum (<integer>) Array (<array>) or Hash (<dict>). Found value: #{v.inspect} of type: \"#{v.class}\""
-		- p.call( @xml_keys, p)
+		- p.call( @hash, p)
