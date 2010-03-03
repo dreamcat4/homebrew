@@ -226,8 +226,8 @@ class Formula
   end
 
   def plist name=nil, *program_args, &blk
-    name = "com.github.homebrew.#{class.to_s.snake_case}" unless name
-    @launchd_plists << LaunchdPlist.new(prefix, name, *program_args, &blk)
+    name = "com.github.homebrew.#{self.class.to_s.snake_case}" unless name
+    @launchd_plists << ::LaunchdPlist.new(prefix, name, *program_args, &blk)
   end
 
   def link_plists

@@ -24,39 +24,181 @@
 
 require 'global'
 module BrewMixins
-# This method was found in formula.rb, and it also requires global.rb
-# perhaps we can get hold of this system() method a better way, dunno
-def system cmd, *args
-  ohai "#{cmd} #{args*' '}".strip
+  # This method was found in formula.rb, and it also requires global.rb
+  # perhaps we can get hold of this system() method a better way, dunno
+  def system cmd, *args
+    ohai "#{cmd} #{args*' '}".strip
 
-  if ARGV.verbose?
-    safe_system cmd, *args
-  else
-    rd, wr = IO.pipe
-    pid = fork do
-      rd.close
-      $stdout.reopen wr
-      $stderr.reopen wr
-      exec(cmd, *args) rescue nil
-      exit! 1 # never gets here unless exec threw or failed
+    if ARGV.verbose?
+      safe_system cmd, *args
+    else
+      rd, wr = IO.pipe
+      pid = fork do
+        rd.close
+        $stdout.reopen wr
+        $stderr.reopen wr
+        exec(cmd, *args) rescue nil
+        exit! 1 # never gets here unless exec threw or failed
+      end
+      wr.close
+      out = ''
+      out << rd.read until rd.eof?
+      Process.wait
+      unless $?.success?
+        puts out
+        raise
+      end
     end
-    wr.close
-    out = ''
-    out << rd.read until rd.eof?
-    Process.wait
-    unless $?.success?
-      puts out
-      raise
+  rescue SystemCallError
+    # usually because exec could not be find the command that was requested
+    raise
+  rescue
+    raise BuildError.new(cmd, args, $?)
+  end
+end
+
+# OrderedHash is namespaced to prevent conflicts with other implementations
+module ActiveSupport
+  # Hash is ordered in Ruby 1.9!
+  if RUBY_VERSION >= '1.9'
+    class OrderedHash < ::Hash #:nodoc:
+    end
+  else
+    class OrderedHash < Hash #:nodoc:
+      def initialize(*args, &block)
+        super
+        @keys = []
+      end
+
+      def self.[](*args)
+        ordered_hash = new
+
+        if (args.length == 1 && args.first.is_a?(Array))
+          args.first.each do |key_value_pair|
+            next unless (key_value_pair.is_a?(Array))
+            ordered_hash[key_value_pair[0]] = key_value_pair[1]
+          end
+
+          return ordered_hash
+        end
+
+        unless (args.size % 2 == 0)
+          raise ArgumentError.new("odd number of arguments for Hash")
+        end
+
+        args.each_with_index do |val, ind|
+          next if (ind % 2 != 0)
+          ordered_hash[val] = args[ind + 1]
+        end
+
+        ordered_hash
+      end
+
+      def initialize_copy(other)
+        super
+        # make a deep copy of keys
+        @keys = other.keys
+      end
+
+      def []=(key, value)
+        @keys << key if !has_key?(key)
+        super
+      end
+
+      def delete(key)
+        if has_key? key
+          index = @keys.index(key)
+          @keys.delete_at index
+        end
+        super
+      end
+      
+      def delete_if
+        super
+        sync_keys!
+        self
+      end
+
+      def reject!
+        super
+        sync_keys!
+        self
+      end
+
+      def reject(&block)
+        dup.reject!(&block)
+      end
+
+      def keys
+        @keys.dup
+      end
+
+      def values
+        @keys.collect { |key| self[key] }
+      end
+
+      def to_hash
+        self
+      end
+
+      def to_a
+        @keys.map { |key| [ key, self[key] ] }
+      end
+
+      def each_key
+        @keys.each { |key| yield key }
+      end
+
+      def each_value
+        @keys.each { |key| yield self[key]}
+      end
+
+      def each
+        @keys.each {|key| yield [key, self[key]]}
+      end
+
+      alias_method :each_pair, :each
+
+      def clear
+        super
+        @keys.clear
+        self
+      end
+
+      def shift
+        k = @keys.first
+        v = delete(k)
+        [k, v]
+      end
+
+      def merge!(other_hash)
+        other_hash.each {|k,v| self[k] = v }
+        self
+      end
+
+      def merge(other_hash)
+        dup.merge!(other_hash)
+      end
+
+      # When replacing with another hash, the initial order of our keys must come from the other hash -ordered or not.
+      def replace(other)
+        super
+        @keys = other.keys
+        self
+      end
+
+      def inspect
+        "#<OrderedHash #{super}>"
+      end
+
+    private
+
+      def sync_keys!
+        @keys.delete_if {|k| !has_key?(k)}
+      end
     end
   end
-rescue SystemCallError
-  # usually because exec could not be find the command that was requested
-  raise
-rescue
-  raise BuildError.new(cmd, args, $?)
 end
-end
-
 class Object
   def method_name
     if  /`(.*)'/.match(caller.first)
@@ -106,10 +248,13 @@ module LaunchdPlistStructs
       {}
     end
 
-    def method_missing method_symbol, *args, &block
-      valid_keys.reject(){ |k,v| k == :complex_keys}.each do |key_type, valid_keys_of_those_type|
+    def method_missing method_symbol, *args, &blk
+      puts "method_missing: #{method_symbol.inspect}, args: #{args.inspect}"
+      # valid_keys.reject(){ |k,v| k == :complex_keys}.each do |key_type, valid_keys_of_those_type|
+      valid_keys.each do |key_type, valid_keys_of_those_type|
         if valid_keys_of_those_type.include?(method_symbol.to_s.camelcase)
-          return eval("set_or_return #{key_type} method_symbol.to_s.camelcase, *args, &blk")
+          puts "key_type = #{key_type}, method_symbol.to_s.camelcase = #{method_symbol.to_s.camelcase}, args = #{args.inspect}"
+          return eval("set_or_return key_type, method_symbol.to_s.camelcase, *args, &blk")
         end
       end
     end
@@ -137,6 +282,7 @@ module LaunchdPlistStructs
     end
 
     def set_or_return key_type, key, value=nil
+      puts "#{method_name}, key_type: #{key_type.inspect}, value: #{value.inspect}"
       if value
         validate_value key_type, key, value
         @hash[key] = value
@@ -158,8 +304,15 @@ module LaunchdPlistStructs
       else
         @enclosing_block = self.class.to_s.snake_case
       end
-      @hash = {}
-      instance_eval(&blk)
+      puts "@orig = #{@orig.inspect}"
+      puts "@enclosing_block = #{@enclosing_block}"
+
+      @block = blk
+      @hash = ::ActiveSupport::OrderedHash.new
+      puts "@hash = #{@hash}"
+
+      instance_eval(&@block) if @block
+      puts "@hash = #{@hash}"
     end
 
     def hash
@@ -182,7 +335,7 @@ module LaunchdPlistStructs
 
     def unselect_all
       @orig = nil
-      @hash = {}
+      @hash = ::ActiveSupport::OrderedHash.new
     end
 
     def import_all
@@ -274,7 +427,7 @@ module LaunchdPlistStructs
       @hash[key] = value
     when nil
       if blk
-        @hash[key] ||= {}
+        @hash[key] ||= ::ActiveSupport::OrderedHash.new
         @hash[key] = ::LaunchdPlistStructs::KeepAlive.new(@hash[key],&blk).hash
       else
         @hash[key]
@@ -360,7 +513,7 @@ module LaunchdPlistStructs
   # 
   def start_calendar_interval index=nil, &blk
     key = "StartCalendarInterval"
-    unless [Fixnum,NilClass].include? index
+    unless [Fixnum,NilClass].include? index.class
       raise "Invalid index: #{method_name} #{index.inspect}. Should be: #{method_name} <integer>"
     end
     if blk
@@ -434,7 +587,7 @@ module LaunchdPlistStructs
   def soft_resource_limits value=nil, &blk
     key = "SoftResourceLimits"
     if blk
-      @hash[key] ||= {}
+      @hash[key] ||= ::ActiveSupport::OrderedHash.new
       @hash[key] = ::LaunchdPlistStructs::ResourceLimits.new(@hash[key],&blk).hash
     else
       @hash[key]
@@ -493,7 +646,7 @@ module LaunchdPlistStructs
   def hard_resource_limits value=nil, &blk
     key = "HardResourceLimits"
     if blk
-      @hash[key] ||= {}
+      @hash[key] ||= ::ActiveSupport::OrderedHash.new
       @hash[key] = ::LaunchdPlistStructs::ResourceLimits.new(@hash[key],&blk).hash
     else
       @hash[key]
@@ -512,7 +665,7 @@ module LaunchdPlistStructs
   	    @hash[service] = value
         set_or_return :bool, service, value
       elsif blk
-        @hash[service] = {}
+        @hash[service] = ::ActiveSupport::OrderedHash.new
         @hash[service] = ::LaunchdPlistStructs::MachServices::MachService.new(@hash[service],&blk).hash
       else
         @orig
@@ -555,7 +708,7 @@ module LaunchdPlistStructs
   def mach_services value=nil, &blk
     key = "MachServices"
     if blk
-      @hash[key] ||= {}
+      @hash[key] ||= ::ActiveSupport::OrderedHash.new
       @hash[key] = ::LaunchdPlistStructs::MachServices.new(@hash[key],&blk).hash
     else
       @hash[key]
@@ -571,91 +724,93 @@ module LaunchdPlistStructs
         :bool_or_string_or_array_of_strings => %w[Bonjour]
       }
     end
-
   end
 
-  def sockets value=nil, &blk
-    # :call-seq:
-    #   sockets(array_index=nil) { block_of_keys }
-    #   sockets -> array or nil
-    #
-    # sockets <array_index=nil> <block of keys>
-    # Sockets <dictionary of dictionaries... OR dictionary of array of dictionaries...>
-    # 
-    # Please See: http://developer.apple.com/mac/library/documentation/MacOSX/Conceptual/BPSystemStartup/Articles/LaunchOnDemandDaemons.html
-    # for more information about how to properly use the Sockets feature
-    # 
-    # This optional key is used to specify launch on demand sockets that can be used to let launchd know when to run the job. The job must check-in to get a copy of the
-    # file descriptors using APIs outlined in launch(3).  The keys of the top level Sockets dictionary can be anything. They are meant for the application developer to
-    # use to differentiate which descriptors correspond to which application level protocols (e.g. http vs. ftp vs. DNS...).  At check-in time, the value of each Sockets
-    # dictionary key will be an array of descriptors. Daemon/Agent writers should consider all descriptors of a given key to be to be effectively equivalent, even though
-    # each file descriptor likely represents a different networking protocol which conforms to the criteria specified in the job configuration file.
-    # The parameters below are used as inputs to call getaddrinfo(3).
-    # 
-    # sockets index=nil do
-    # 
-    #   SockType <string>
-    #   This optional key tells launchctl what type of socket to create. The default is "stream" and other valid values for this key are "dgram" and "seqpacket"
-    #   respectively.
-    # 
-    #   SockPassive <boolean>
-    #   This optional key specifies whether listen(2) or connect(2) should be called on the created file descriptor. The default is true ("to listen").
-    # 
-    #   SockNodeName <string>
-    #   This optional key specifies the node to connect(2) or bind(2) to.
-    # 
-    #   SockServiceName <string>
-    #   This optional key specifies the service on the node to connect(2) or bind(2) to.
-    # 
-    #   SockFamily <string>
-    #   This optional key can be used to specifically request that "IPv4" or "IPv6" socket(s) be created.
-    # 
-    #   SockProtocol <string>
-    #   This optional key specifies the protocol to be passed to socket(2).  The only value understood by this key at the moment is "TCP".
-    # 
-    #   SockPathName <string>
-    #   This optional key implies SockFamily is set to "Unix". It specifies the path to connect(2) or bind(2) to.
-    # 
-    #   SecureSocketWithKey <string>
-    #   This optional key is a variant of SockPathName. Instead of binding to a known path, a securely generated socket is created and the path is assigned to the
-    #   environment variable that is inherited by all jobs spawned by launchd.
-    # 
-    #   SockPathMode <integer>
-    #   This optional key specifies the mode of the socket. Known bug: Property lists don't support octal, so please convert the value to decimal.
-    # 
-    #   Bonjour <boolean or string or array of strings>
-    #   This optional key can be used to request that the service be registered with the mDNSResponder(8).  If the value is boolean, the service name is inferred from
-    #   the SockServiceName.
-    # 
-    #   MulticastGroup <string>
-    #   This optional key can be used to request that the datagram socket join a multicast group.  If the value is a hostname, then getaddrinfo(3) will be used to
-    #   join the correct multicast address for a given socket family.  If an explicit IPv4 or IPv6 address is given, it is required that the SockFamily family also be
-    #   set, otherwise the results are undefined.
-    # 
-    # end
-    # 
-    # Example:
-    # 
-    # sockets 0 do
-    #   sock_node_name "127.0.0.1"
-    #   sock_service_name "ipp"
-    # end
-    # 
-    # sockets 1 do
-    #   sock_path_mode 49663
-    #   sock_path_name "/private/var/run/cupsd"
-    # end
-    # 
+  # :call-seq:
+  #   sockets(array_index=nil) { block_of_keys }
+  #   sockets -> array or nil
+  #
+  # sockets <array_index=nil> <block of keys>
+  # Sockets <dictionary of dictionaries... OR dictionary of array of dictionaries...>
+  # 
+  # Please See: http://developer.apple.com/mac/library/documentation/MacOSX/Conceptual/BPSystemStartup/Articles/LaunchOnDemandDaemons.html
+  # for more information about how to properly use the Sockets feature
+  # 
+  # This optional key is used to specify launch on demand sockets that can be used to let launchd know when to run the job. The job must check-in to get a copy of the
+  # file descriptors using APIs outlined in launch(3).  The keys of the top level Sockets dictionary can be anything. They are meant for the application developer to
+  # use to differentiate which descriptors correspond to which application level protocols (e.g. http vs. ftp vs. DNS...).  At check-in time, the value of each Sockets
+  # dictionary key will be an array of descriptors. Daemon/Agent writers should consider all descriptors of a given key to be to be effectively equivalent, even though
+  # each file descriptor likely represents a different networking protocol which conforms to the criteria specified in the job configuration file.
+  # The parameters below are used as inputs to call getaddrinfo(3).
+  # 
+  # sockets index=nil do
+  # 
+  #   SockType <string>
+  #   This optional key tells launchctl what type of socket to create. The default is "stream" and other valid values for this key are "dgram" and "seqpacket"
+  #   respectively.
+  # 
+  #   SockPassive <boolean>
+  #   This optional key specifies whether listen(2) or connect(2) should be called on the created file descriptor. The default is true ("to listen").
+  # 
+  #   SockNodeName <string>
+  #   This optional key specifies the node to connect(2) or bind(2) to.
+  # 
+  #   SockServiceName <string>
+  #   This optional key specifies the service on the node to connect(2) or bind(2) to.
+  # 
+  #   SockFamily <string>
+  #   This optional key can be used to specifically request that "IPv4" or "IPv6" socket(s) be created.
+  # 
+  #   SockProtocol <string>
+  #   This optional key specifies the protocol to be passed to socket(2).  The only value understood by this key at the moment is "TCP".
+  # 
+  #   SockPathName <string>
+  #   This optional key implies SockFamily is set to "Unix". It specifies the path to connect(2) or bind(2) to.
+  # 
+  #   SecureSocketWithKey <string>
+  #   This optional key is a variant of SockPathName. Instead of binding to a known path, a securely generated socket is created and the path is assigned to the
+  #   environment variable that is inherited by all jobs spawned by launchd.
+  # 
+  #   SockPathMode <integer>
+  #   This optional key specifies the mode of the socket. Known bug: Property lists don't support octal, so please convert the value to decimal.
+  # 
+  #   Bonjour <boolean or string or array of strings>
+  #   This optional key can be used to request that the service be registered with the mDNSResponder(8).  If the value is boolean, the service name is inferred from
+  #   the SockServiceName.
+  # 
+  #   MulticastGroup <string>
+  #   This optional key can be used to request that the datagram socket join a multicast group.  If the value is a hostname, then getaddrinfo(3) will be used to
+  #   join the correct multicast address for a given socket family.  If an explicit IPv4 or IPv6 address is given, it is required that the SockFamily family also be
+  #   set, otherwise the results are undefined.
+  # 
+  # end
+  # 
+  # Example:
+  # 
+  # sockets 0 do
+  #   sock_node_name "127.0.0.1"
+  #   sock_service_name "ipp"
+  # end
+  # 
+  # sockets 1 do
+  #   sock_path_mode 49663
+  #   sock_path_name "/private/var/run/cupsd"
+  # end
+  #
+  def sockets index=nil, &blk
     key = "Sockets"
-    unless [Fixnum,NilClass].include? index
+    unless [Fixnum,NilClass].include? index.class
+      puts index.class.inspect
       raise "Invalid index: #{method_name} #{index.inspect}. Should be: #{method_name} <integer>"
     end
     if blk
       @hash[key] ||= []
-      h = ::LaunchdPlistStructs::Socket.new(@hash[key],index,&blk).hash
       if index
+        @hash[key][index] ||= ::ActiveSupport::OrderedHash.new
+        h = ::LaunchdPlistStructs::Socket.new(@hash[key],index,&blk).hash
         @hash[key][index] = h
       else
+        h = ::LaunchdPlistStructs::Socket.new(@hash[key],&blk).hash
         @hash[key] << h
       end
     else
@@ -664,85 +819,85 @@ module LaunchdPlistStructs
   end
 end
 
-# LaunchdLibxmlPlistParser requires libxml-ruby, a substantial library
-# http://rubyforge.org/frs/?group_id=494&release_id=4388
-require 'libxml-bindings'
-class LaunchdLibxmlPlistParser
-  include ::BrewMixins
-  include ::LaunchdPlistStructs
-
-  def initialize filename, *args, &blk
-    @filename = filename
-    raise "Can't find filename: #{@filename}" unless File.exists? @filename
-    validate
-  end
-
-  def validate
-    system "plutil #{@filename}"
-  end
-
-  def tree_hash n
-    hash = {}
-    n_xml_keys = n.nodes["key"]
-    n_xml_keys.each do |n|
-      k = n.inner_xml
-      vnode = n.next
-      case vnode.name
-      when "true", "false"
-        hash[k] = eval(vnode.name)
-      when "string"
-        hash[k] = vnode.inner_xml
-      when "integer"
-        hash[k] = vnode.inner_xml.to_i
-      when "array"
-        hash[k] = tree_array(vnode)
-      when "dict"
-        hash[k] = tree_hash(vnode)
-      else
-        raise "Unsupported / not recognized plist key: #{vnode.name}"
-      end
-    end
-    return hash
-  end
-
-  def tree_array n
-    array = []
-    n.children.each do |node|
-      case node.name
-      when "true", "false"
-        array << eval(node.name)
-      when "string"
-        array << node.inner_xml
-      when "integer"
-        array << node.inner_xml.to_i
-      when "array"
-        array << tree_array(node)
-      when "dict"
-        array << tree_hash(node)
-      else
-        raise "Unsupported / not recognized plist key: #{vnode.name}"
-      end
-    end
-    return array
-  end
-
-  def parse_launchd_plist
-    ::LibXML::XML.default_keep_blanks = false
-    @string = File.read(@filename)
-    @doc = @string.to_xmldoc
-    @doc.strip!
-    @root = @doc.node["/plist/dict"]
-    tree_hash @root
-  end
-
-  def filename
-    @filename
-  end
-
-  def plist_struct
-    @plist_struct ||= parse_launchd_plist
-  end
-end
+# # LaunchdLibxmlPlistParser requires libxml-ruby, a substantial library
+# # http://rubyforge.org/frs/?group_id=494&release_id=4388
+# require 'libxml-bindings'
+# class LaunchdLibxmlPlistParser
+#   include ::BrewMixins
+#   include ::LaunchdPlistStructs
+# 
+#   def initialize filename, *args, &blk
+#     @filename = filename
+#     raise "Can't find filename: #{@filename}" unless File.exists? @filename
+#     validate
+#   end
+# 
+#   def validate
+#     system "plutil #{@filename}"
+#   end
+# 
+#   def tree_hash n
+#     hash = ::ActiveSupport::OrderedHash.new
+#     n_xml_keys = n.nodes["key"]
+#     n_xml_keys.each do |n|
+#       k = n.inner_xml
+#       vnode = n.next
+#       case vnode.name
+#       when "true", "false"
+#         hash[k] = eval(vnode.name)
+#       when "string"
+#         hash[k] = vnode.inner_xml
+#       when "integer"
+#         hash[k] = vnode.inner_xml.to_i
+#       when "array"
+#         hash[k] = tree_array(vnode)
+#       when "dict"
+#         hash[k] = tree_hash(vnode)
+#       else
+#         raise "Unsupported / not recognized plist key: #{vnode.name}"
+#       end
+#     end
+#     return hash
+#   end
+# 
+#   def tree_array n
+#     array = []
+#     n.children.each do |node|
+#       case node.name
+#       when "true", "false"
+#         array << eval(node.name)
+#       when "string"
+#         array << node.inner_xml
+#       when "integer"
+#         array << node.inner_xml.to_i
+#       when "array"
+#         array << tree_array(node)
+#       when "dict"
+#         array << tree_hash(node)
+#       else
+#         raise "Unsupported / not recognized plist key: #{vnode.name}"
+#       end
+#     end
+#     return array
+#   end
+# 
+#   def parse_launchd_plist
+#     ::LibXML::XML.default_keep_blanks = false
+#     @string = File.read(@filename)
+#     @doc = @string.to_xmldoc
+#     @doc.strip!
+#     @root = @doc.node["/plist/dict"]
+#     tree_hash @root
+#   end
+# 
+#   def filename
+#     @filename
+#   end
+# 
+#   def plist_struct
+#     @plist_struct ||= parse_launchd_plist
+#   end
+# end
 
 class LaunchdPlist
   include ::BrewMixins
@@ -759,7 +914,7 @@ class LaunchdPlist
     end
     
     @label = @filename.match(/^.*\/(.*)\.plist$/)[1]
-    @shortname = filename.match(/^.*\.(.*)$/)[1]
+    @shortname = @filename.match(/^.*\.(.*)$/)[1]
 
     if program_args
       program_args.each do |arg|
@@ -769,21 +924,23 @@ class LaunchdPlist
       program_args = program_args[0].split if program_args.size == 1 && !( prefix =~ /\s/ )
       @program_arguments = program_args
     end
-
+    
     @block = blk
+    @hash = @orig = ::ActiveSupport::OrderedHash.new
+
     eval_plist_block(&@block) if @block
     raise "Not enough information to generat plist: \"#{@filename}\" - No program arguments given" unless @program_arguments    
   end
 
   def eval_plist_block &blk
-    instance_eval blk
+    instance_eval &blk
   end
 
   def finalize
     if File.exists? @filename
       if override_plist_keys?
-        @hash = @obj = ::LibxmlLaunchdPlistParser.new(@filename).plist_struct
-        eval_plist_block(&@block) if @block
+        # @hash = @obj = ::LibxmlLaunchdPlistParser.new(@filename).plist_struct
+        # eval_plist_block(&@block) if @block
         write_plist
       end
     else
@@ -809,7 +966,7 @@ class LaunchdPlist
   end
 
   def validate
-    system "plutil #{@filename}"
+    system "/usr/bin/plutil #{@filename}"
   end
 end
 
