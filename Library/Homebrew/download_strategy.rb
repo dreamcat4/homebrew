@@ -250,7 +250,7 @@ class GitDownloadStrategy <AbstractDownloadStrategy
   def fetch
     raise "You must install Git:\n\n"+
           "  brew install git\n" \
-          unless system "/usr/bin/which git"
+          unless system "/usr/bin/which git > /dev/null"
 
     ohai "Cloning #{@url}"
     unless @clone.exist?
@@ -273,7 +273,7 @@ class GitDownloadStrategy <AbstractDownloadStrategy
         case @spec
         when :branch
           nostdout { quiet_safe_system 'git', 'checkout', "origin/#{@ref}" }
-        when :tag
+        when :ref, :tag
           nostdout { quiet_safe_system 'git', 'checkout', @ref }
         end
       end

@@ -37,7 +37,15 @@ class Ddclient <Formula
     (var + 'run/ddclient').mkpath
 
     # Write the launchd script
-    (prefix + 'org.ddclient.plist').write startup_plist
+    launchd_plist "org.ddclient" do
+      run_at_load true; on_demand true
+      program_arguments ["#{sbin}/ddclient","-file","#{etc}/ddclient/ddclient.conf"]
+      start_calendar_interval do
+        minute 0
+      end
+      watch_paths ["#{etc}/ddclient"]
+      working_directory "#{etc}/ddclient"
+    end
   end
 
   def caveats; <<-EOS
@@ -56,40 +64,6 @@ For ddclient to work, you will need to do the following:
    sudo launchctl load /Library/LaunchDaemons/org.ddclient.plist
 
 Next boot of system will automatically start ddclient.
-EOS
-  end
-
-  def startup_plist
-    return <<-EOS
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>Label</key>
-	<string>org.ddclient</string>
-	<key>OnDemand</key>
-	<true/>
-	<key>ProgramArguments</key>
-	<array>
-		<string>#{sbin}/ddclient</string>
-		<string>-file</string>
-		<string>#{etc}/ddclient/ddclient.conf</string>
-	</array>
-	<key>RunAtLoad</key>
-	<true/>
-	<key>StartCalendarInterval</key>
-	<dict>
-		<key>Minute</key>
-		<integer>0</integer>
-	</dict>
-	<key>WatchPaths</key>
-	<array>
-		<string>#{etc}/ddclient</string>
-	</array>
-	<key>WorkingDirectory</key>
-	<string>#{etc}/ddclient</string>
-</dict>
-</plist>
 EOS
   end
 end

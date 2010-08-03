@@ -13,5 +13,12 @@ class Lighttpd <Formula
                           "--prefix=#{prefix}",
                           "--with-openssl", "--with-ldap"
     system "make install"
+
+    launchd_plist do
+      run_at_load true; keep_alive { network_state true }
+      program_arguments ["#{bin}/lighttpd", "-D", "-f", "#{etc}/lighttpd.conf"]
+      standard_error_path "/var/log/lighttpd.log"
+      user_name "www"
+    end
   end
 end

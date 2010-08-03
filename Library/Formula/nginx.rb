@@ -49,7 +49,13 @@ class Nginx < Formula
     system "./configure", *args
     system "make install"
 
-    (prefix+'org.nginx.plist').write startup_plist
+    launchd_plist "org.nginx" do
+      # launchd needs 'daemon off;' in nginx.conf
+      run_at_load true; keep_alive { network_state true }
+      program_arguments ["#{sbin}/nginx","-g","daemon off;"]
+      working_directory "#{HOMEBREW_PREFIX}"
+      user_name `whoami`.chomp
+    end
   end
 
   def caveats
@@ -66,33 +72,6 @@ You can start nginx automatically on login with:
     launchctl load -w ~/Library/LaunchAgents/org.nginx.plist
 
     CAVEATS
-  end
-
-  def startup_plist
-    return <<-EOPLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-  <dict>
-    <key>Label</key>
-    <string>org.nginx</string>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>UserName</key>
-    <string>#{`whoami`.chomp}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>#{sbin}/nginx</string>
-        <string>-g</string>
-        <string>daemon off;</string>
-    </array>
-    <key>WorkingDirectory</key>
-    <string>#{HOMEBREW_PREFIX}</string>
-  </dict>
-</plist>
-    EOPLIST
   end
 end
 

@@ -1,5 +1,6 @@
 require 'download_strategy'
 require 'fileutils'
+require 'plist4r'
 
 class FormulaUnavailableError <RuntimeError
   def initialize name
@@ -50,10 +51,38 @@ class SoftwareSpecification
   end
 
   def detect_version
-    Pathname.new(@url).version
+    case download_strategy.to_s.downcase
+    when /^git/
+      @specs[:ref] || @specs[:tag] || @specs[:branch] || "HEAD"
+    else
+      Pathname.new(@url).version
+    end
   end
 end
 
+class FormulaPlist < Plist4r::Plist
+  OptionsHash << "formula"
+
+  def formula formula=nil
+    if formula
+      @formula = formula
+    else
+      @formula
+    end
+  end
+
+  def method_missing method_sym, *args, &blk
+    if @formula.respond_to?(method_sym)
+      if block_given?
+        @formula.instance_eval "#{method_sym} *args, &blk"
+      else
+        @formula.instance_eval "#{method_sym} *args"
+      end
+    else
+      super
+    end
+  end
+end
 
 # Derive and define at least @url, see Library/Formula for examples
 class Formula
@@ -206,6 +235,31 @@ class Formula
         interactive_shell self
       end
     end
+  end
+
+  def launchd_plist label=nil, &blk
+    case label
+    when nil, ""
+      label = "com.github.homebrew.#{self.class.to_s.snake_case}"
+    when /^[^\.]+$/
+      label = "com.github.homebrew.#{label}"
+    else
+      label = File.basename(label,".plist")
+    end
+
+    filename = label + ".plist"
+    path = "#{prefix}/Library/LaunchDaemons"
+
+    plist = FormulaPlist.new :filename => filename, :path => path, :strict_keys => true, :formula => self
+
+    plist.plist_type(:launchd)
+    plist.label(label)
+    plist.edit(&blk)
+
+    Pathname.new(path).mkpath
+    plist.save
+
+    plist
   end
 
   # we don't have a std_autotools variant because autotools is a lot less

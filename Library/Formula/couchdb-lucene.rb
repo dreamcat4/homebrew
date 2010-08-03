@@ -18,7 +18,15 @@ class CouchdbLucene <Formula
     system "mv couchdb-lucene-#{version}/* #{prefix}"
 
     (etc + "couchdb/local.d/couchdb-lucene.ini").write ini_file
-    (prefix + "couchdb-lucene.plist").write plist_file
+
+    launchd_plist "couchdb-lucene" do
+      run_at_load true; keep_alive true
+      environment_variables "HOME" => "~", "DYLD_LIBRARY_PATH" => "/opt/local/lib:$DYLD_LIBRARY_PATH"
+      program_arguments ["#{bin}/run"]
+      user_name `whoami`.chomp
+      standard_error_path "/dev/null"
+      standard_out_path   "/dev/null"
+    end
   end
 
   def caveats; <<-EOS
@@ -42,41 +50,6 @@ fti=#{`which python`.chomp} #{prefix}/tools/couchdb-external-hook.py
 
 [httpd_db_handlers]
 _fti = {couch_httpd_external, handle_external_req, <<"fti">>}
-EOS
-  end
-
-  def plist_file
-    return <<-EOS
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-  <dict>
-    <key>Label</key>
-    <string>couchdb-lucene</string>
-    <key>EnvironmentVariables</key>
-    <dict>
-      <key>HOME</key>
-      <string>~</string>
-      <key>DYLD_LIBRARY_PATH</key>
-      <string>/opt/local/lib:$DYLD_LIBRARY_PATH</string>
-    </dict>
-    <key>ProgramArguments</key>
-    <array>
-      <string>#{bin}/run</string>
-    </array>
-    <key>UserName</key>
-    <string>#{`whoami`.chomp}</string>
-    <key>StandardOutPath</key>
-    <string>/dev/null</string>
-    <key>StandardErrorPath</key>
-    <string>/dev/null</string>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-  </dict>
-</plist>
 EOS
   end
 end

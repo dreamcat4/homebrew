@@ -11,7 +11,11 @@ class Memcached <Formula
     system "./configure", "--prefix=#{prefix}"
     system "make install"
 
-    (prefix+'com.danga.memcached.plist').write startup_plist
+    launchd_plist "com.danga.memcached" do
+      run_at_load true; keep_alive true
+      program_arguments ["#{HOMEBREW_PREFIX}/bin/memcached","-l","127.0.0.1"]
+      working_directory "#{HOMEBREW_PREFIX}"
+    end
   end
 
   def caveats; <<-EOS
@@ -24,30 +28,5 @@ Or start it manually:
 
 Add "-d" to start it as a daemon.
     EOS
-  end
-
-  def startup_plist
-    return <<-EOPLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.danga.memcached</string>
-  <key>KeepAlive</key>
-  <true/>
-  <key>ProgramArguments</key>
-  <array>
-    <string>#{HOMEBREW_PREFIX}/bin/memcached</string>
-    <string>-l</string>
-    <string>127.0.0.1</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>WorkingDirectory</key>
-  <string>#{HOMEBREW_PREFIX}</string>
-</dict>
-</plist>
-    EOPLIST
   end
 end

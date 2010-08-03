@@ -55,7 +55,12 @@ class Postgresql <Formula
       system "cd contrib/#{a}; make install"
     end
 
-    (prefix+'org.postgresql.postgres.plist').write startup_plist
+    launchd_plist "org.postgresql.postgres" do
+      run_at_load true; keep_alive true
+      program_arguments ["#{bin}/postgres","-D","#{var}/postgres","-r","#{var}/postgres/server.log"]
+      user_name `whoami`.chomp
+      working_directory "#{HOMEBREW_PREFIX}"
+    end
   end
 
   def check_python_arch
@@ -121,34 +126,5 @@ To install gems without sudo, see the Homebrew wiki.
     end
 
     return s
-  end
-
-  def startup_plist
-    return <<-EOPLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>KeepAlive</key>
-  <true/>
-  <key>Label</key>
-  <string>org.postgresql.postgres</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>#{bin}/postgres</string>
-    <string>-D</string>
-    <string>#{var}/postgres</string>
-    <string>-r</string>
-    <string>#{var}/postgres/server.log</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>UserName</key>
-  <string>#{`whoami`.chomp}</string>
-  <key>WorkingDirectory</key>
-  <string>#{HOMEBREW_PREFIX}</string>
-</dict>
-</plist>
-    EOPLIST
   end
 end

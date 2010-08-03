@@ -30,7 +30,15 @@ class Mongodb <Formula
 
     # Write the configuration files and launchd script
     (prefix+'mongod.conf').write mongodb_conf
-    (prefix+'org.mongodb.mongod.plist').write startup_plist
+
+    launchd_plist "org.mongodb.mongod" do
+      run_at_load true; keep_alive true
+      program_arguments ["#{bin}/mongod","run","--config","#{prefix}/mongod.conf"]
+      user_name `whoami`.chomp
+      working_directory "#{HOMEBREW_PREFIX}"
+      standard_error_path "#{var}/log/mongodb/output.log"
+      standard_out_path   "#{var}/log/mongodb/output.log"
+    end
   end
 
   def caveats; <<-EOS
@@ -55,38 +63,6 @@ dbpath = #{var}/mongodb
 
 # Only accept local connections
 bind_ip = 127.0.0.1
-EOS
-  end
-
-  def startup_plist
-    return <<-EOS
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>org.mongodb.mongod</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>#{bin}/mongod</string>
-    <string>run</string>
-    <string>--config</string>
-    <string>#{prefix}/mongod.conf</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>UserName</key>
-  <string>#{`whoami`.chomp}</string>
-  <key>WorkingDirectory</key>
-  <string>#{HOMEBREW_PREFIX}</string>
-  <key>StandardErrorPath</key>
-  <string>#{var}/log/mongodb/output.log</string>
-  <key>StandardOutPath</key>
-  <string>#{var}/log/mongodb/output.log</string>
-</dict>
-</plist>
 EOS
   end
 end

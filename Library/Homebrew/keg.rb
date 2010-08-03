@@ -67,6 +67,8 @@ class Keg <Pathname
       end
     end
 
+    link_dir('Library') {|path| :mkpath if path.to_s == "LaunchDaemons"}
+
     return $n+$d
   end
 

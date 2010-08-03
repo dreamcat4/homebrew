@@ -12,7 +12,11 @@ class Dnsmasq <Formula
     system "make install PREFIX=#{prefix}"
 
     prefix.install "dnsmasq.conf.example"
-    (prefix + "uk.org.thekelleys.dnsmasq.plist").write startup_plist
+
+    launchd_plist "uk.org.thekelleys.dnsmasq" do
+      run_at_load true; keep_alive { network_state true }
+      program_arguments ["/usr/local/sbin/dnsmasq","--keep-in-foreground"]
+    end
   end
 
   def caveats; <<-EOS.undent
@@ -28,26 +32,5 @@ class Dnsmasq <Formula
       sudo launchctl load -w /Library/LaunchDaemons/uk.org.thekelleys.dnsmasq.plist
     EOS
   end
-
-  def startup_plist; <<-EOS.undent
-    <?xml version="1.0" encoding="UTF-8"?>
-    <!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-    <plist version="1.0">
-      <dict>
-        <key>Label</key>
-        <string>uk.org.thekelleys.dnsmasq</string>
-        <key>ProgramArguments</key>
-        <array>
-          <string>/usr/local/sbin/dnsmasq</string>
-          <string>--keep-in-foreground</string>
-        </array>
-        <key>KeepAlive</key>
-        <dict>
-          <key>NetworkState</key>
-          <true/>
-        </dict>
-      </dict>
-    </plist>
-    EOS
-  end
 end
+

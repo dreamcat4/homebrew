@@ -175,7 +175,7 @@ def github_info name
   user = 'mxcl'
   branch = 'master'
 
-  if system "/usr/bin/which -s git"
+  if system "/usr/bin/which -s git > /dev/null"
     gh_user=`git config --global github.user 2>/dev/null`.chomp
     /^\*\s*(.*)/.match(`git --work-tree=#{HOMEBREW_REPOSITORY} branch 2>/dev/null`)
     unless $1.nil? || $1.empty? || gh_user.empty?
@@ -300,7 +300,7 @@ def prune
   $d=0
 
   dirs=Array.new
-  paths=%w[bin sbin etc lib include share].collect {|d| HOMEBREW_PREFIX+d}
+  paths=%w[bin sbin etc lib include share Library].collect {|d| HOMEBREW_PREFIX+d}
 
   paths.each do |path|
     path.find do |path|

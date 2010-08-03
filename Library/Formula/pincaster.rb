@@ -11,12 +11,20 @@ class Pincaster <Formula
 
     inreplace "pincaster.conf" do |s|
       s.gsub! "/var/db/pincaster/pincaster.db", "#{var}/db/pincaster/pincaster.db"
-      s.gsub! "# LogFileName       /tmp/pincaster.log", "LogFileName  #{var}/log/pincaster.log"
+      s.gsub! "# LogFileName       /tmp/pincaster.log", "LogFileName  /var/log/pincaster.log"
     end
 
     etc.install "pincaster.conf"
     (var+"db/pincaster/").mkpath
-    (prefix+'com.github.pincaster.plist').write startup_plist
+
+    launchd_plist "com.github.pincaster" do
+      run_at_load true; keep_alive true
+      program_arguments ["#{bin}/pincaster","#{etc}/pincaster.conf"]
+      user_name `whoami`.chomp
+      working_directory "#{var}"
+      standard_error_path "/var/log/pincaster.log"
+      standard_out_path   "/var/log/pincaster.log"
+    end
   end
 
   def caveats
@@ -27,35 +35,5 @@ class Pincaster <Formula
       To start pincaster manually:
         pincaster #{etc}/pincaster.conf
     EOS
-  end
-
-  def startup_plist
-    return <<-EOPLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-  <dict>
-    <key>KeepAlive</key>
-    <true/>
-    <key>Label</key>
-    <string>com.github.pincaster</string>
-    <key>ProgramArguments</key>
-    <array>
-      <string>#{bin}/pincaster</string>
-      <string>#{etc}/pincaster.conf</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>UserName</key>
-    <string>#{`whoami`.chomp}</string>
-    <key>WorkingDirectory</key>
-    <string>#{var}</string>
-    <key>StandardErrorPath</key>
-    <string>#{var}/log/pincaster.log</string>
-    <key>StandardOutPath</key>
-    <string>#{var}/log/pincaster.log</string>
-  </dict>
-</plist>
-    EOPLIST
   end
 end

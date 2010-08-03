@@ -1,7 +1,9 @@
 /*
 !/.gitignore
 !/Library/
+/Library/LaunchDaemons
 !/README.md
 !/bin/brew
 !/share/man/man1/brew.1
+!/share/man/man1/brew-launchd.1
 .DS_Store

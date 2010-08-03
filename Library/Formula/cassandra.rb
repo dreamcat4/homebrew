@@ -11,7 +11,7 @@ class Cassandra <Formula
     (etc+"cassandra").mkpath
 
     inreplace "conf/storage-conf.xml", "/var/lib/cassandra", "#{var}/lib/cassandra"
-    inreplace "conf/log4j.properties", "/var/log/cassandra", "#{var}/log/cassandra"
+    inreplace "conf/log4j.properties", "/var/log/cassandra", "/var/log/cassandra"
 
     inreplace "bin/cassandra.in.sh" do |s|
       s.gsub! "cassandra_home=`dirname $0`/..", "cassandra_home=#{prefix}"

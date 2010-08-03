@@ -31,7 +31,13 @@ class Openvpn <Formula
     (var + 'run/openvpn').mkpath
 
     # Write the launchd script
-    (prefix + 'org.openvpn.plist').write startup_plist
+    launchd_plist "org.openvpn.plist" do
+      run_at_load true; keep_alive true
+      program_arguments ["#{sbin}/openvpn","--config","#{etc}/openvpn/openvpn.conf"]
+      time_out 90
+      watch_paths ["#{etc}/openvpn"]
+      working_directory "#{etc}/openvpn"
+    end
   end
 
   def caveats; <<-EOS
@@ -50,37 +56,6 @@ For OpenVPN to work as a server, you will need to do the following:
    sudo launchctl load /Library/LaunchDaemons/org.openvpn.plist
 
 Next boot of system will automatically start OpenVPN.
-EOS
-  end
-
-  def startup_plist
-    return <<-EOS
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd";>
-<plist version="1.0">
-<dict>
-	<key>Label</key>
-	<string>org.openvpn</string>
-	<key>ProgramArguments</key>
-	<array>
-		<string>#{sbin}/openvpn</string>
-		<string>--config</string>
-		<string>#{etc}/openvpn/openvpn.conf</string>
-	</array>
-	<key>OnDemand</key>
-	<false/>
-	<key>RunAtLoad</key>
-	<true/>
-	<key>TimeOut</key>
-	<integer>90</integer>
-	<key>WatchPaths</key>
-	<array>
-		<string>#{etc}/openvpn</string>
-	</array>
-	<key>WorkingDirectory</key>
-	<string>#{etc}/openvpn</string>
-</dict>
-</plist>
 EOS
   end
 end

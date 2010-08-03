@@ -58,7 +58,12 @@ class Mysql <Formula
     (prefix+'mysql-test').rmtree unless ARGV.include? '--with-tests' # save 66MB!
     (prefix+'sql-bench').rmtree unless ARGV.include? '--with-bench'
 
-    (prefix+'com.mysql.mysqld.plist').write startup_plist
+    launchd_plist "com.mysql.mysqld" do
+      run_at_load true; keep_alive true
+      program "#{bin}/mysqld_safe"
+      user_name `whoami`.chomp
+      working_directory "#{var}"
+    end
   end
 
   def caveats; <<-EOS.undent
@@ -82,28 +87,6 @@ class Mysql <Formula
     Or start manually with:
         mysql.server start
     EOS
-  end
-
-  def startup_plist; <<-EOPLIST.undent
-    <?xml version="1.0" encoding="UTF-8"?>
-    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-    <plist version="1.0">
-    <dict>
-      <key>KeepAlive</key>
-      <true/>
-      <key>Label</key>
-      <string>com.mysql.mysqld</string>
-      <key>Program</key>
-      <string>#{bin}/mysqld_safe</string>
-      <key>RunAtLoad</key>
-      <true/>
-      <key>UserName</key>
-      <string>#{`whoami`.chomp}</string>
-      <key>WorkingDirectory</key>
-      <string>#{var}</string>
-    </dict>
-    </plist>
-    EOPLIST
   end
 end
 
