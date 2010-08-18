@@ -323,7 +323,7 @@ module Plist4r
     #    p_f_release_version(new_ver)
     #  end
     def edit *args, &blk
-      @plist_type.hash @hash
+      @plist_type.to_hash @hash
       instance_eval *args, &blk
       detect_plist_type if plist_type == :plist
     end
@@ -335,7 +335,7 @@ module Plist4r
     # @see Plist4r::DataMethods#method_missing
     # @see #plist_type
     def method_missing method_sym, *args, &blk
-      @plist_type.method_missing method_sym, *args, &blk
+      eval "@plist_type.#{method_sym} *args, &blk"
     end
   
     # Backend method to set or return all new plist data resulting from a backend API. Used in load operations.
@@ -467,7 +467,7 @@ module Plist4r
     def delete_if *keys, &blk
       delete *keys
       @hash.delete_if &blk
-      @plist_type.hash @hash
+      @plist_type.to_hash @hash
     end
 
     # Clears all plist keys and their contents
@@ -485,7 +485,7 @@ module Plist4r
     def merge! other_plist
       if plist_type == other_plist.plist_type
         @hash.merge! other_plist.to_hash
-        @plist_type.hash @hash
+        @plist_type.to_hash @hash
       else
         raise "plist_type differs, one is #{plist_type.inspect}, and the other is #{plist.plist_type.inspect}"
       end
