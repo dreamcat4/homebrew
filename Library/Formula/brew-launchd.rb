@@ -3,8 +3,13 @@ require 'formula'
 class BrewLaunchd < Formula
   url 'git://github.com/dreamcat4/brew-launchd.git', :tag => 'stable'
   homepage 'http://dreamcat4.github.com/brew-launchd'
-  
+
   def install
+    # A daemon for triggering jobs on a listen TCP port
+    system "ruby", "-Cext", "extconf.rb"
+    system 'make -C ext'
+    bin.install "#{prefix}/ext/launchd-socket-listener-unload"
+    
     prefix.install Dir['*']
     bin.install    Dir["bin/*"]
     man1.install   gzip("#{prefix}/man1/brew-launchd.1")
