@@ -2,6 +2,8 @@
 require 'plist4r/plist_type'
 
 module Plist4r
+  # For help in working with launchd, see http://www.mactech.com/articles/mactech/Vol.21/21.06/launchd/
+  # 
   # @author Dreamcat4 (dreamcat4@gmail.com)
   class PlistType::Launchd < PlistType
 
@@ -11,57 +13,65 @@ module Plist4r
     # @see Plist4r::DataMethods
     ValidKeys =
     {
-      :string           => %w[ Label UserName GroupName LimitLoadToSessionType Program RootDirectory \
+      :string           => %w[ Label UserName GroupName LimitLoadToSessionType Program RootDirectory
                                WorkingDirectory StandardInPath StandardOutPath StandardErrorPath ],
 
-      :bool             => %w[ Disabled EnableGlobbing EnableTransactions OnDemand RunAtLoad InitGroups \
-                               StartOnMount Debug WaitForDebugger AbandonProcessGroup HopefullyExitsFirst \
-                               HopefullyExitsLast LowPriorityIO LaunchOnlyOnce ],
+      :bool             => %w[ Disabled EnableGlobbing EnableTransactions OnDemand RunAtLoad InitGroups
+                               StartOnMount Debug WaitForDebugger AbandonProcessGroup HopefullyExitsFirst
+                               HopefullyExitsLast LowPriorityIO LaunchOnlyOnce SessionCreate ServiceIPC
+                               IgnoreProcessGroupAtShutdown ],
 
       :integer          => %w[ Umask TimeOut ExitTimeOut ThrottleInterval StartInterval Nice ],
 
       :array_of_strings => %w[ LimitLoadToHosts LimitLoadFromHosts ProgramArguments WatchPaths QueueDirectories ],
 
-      :method_defined   => %w[ inetdCompatibility KeepAlive EnvironmentVariables StartCalendarInterval 
-                               SoftResourceLimits, HardResourceLimits MachServices Socket ]
+      :method_defined   => %w[ inetdCompatibility KeepAlive EnvironmentVariables UserEnvironmentVariables
+                               StartCalendarInterval SoftResourceLimits, HardResourceLimits MachServices Socket ]
     }
 
+
+    class InetdCompatibility < ArrayDict
+      ValidKeys = { :bool => %w[Wait] }
+    end
+
     # Set or return the plist key +inetdCompatibility+
-    # @param [Hash <true,false>] value the 
+    # @param [Block] block
     # The presence of this key specifies that the daemon expects to be run as if it were launched from inetd.
     # 
-    # @option value [true,false] :wait (nil)
-    #   This flag corresponds to the "wait" or "nowait" option of inetd. If true, then the listening socket is passed via the standard in/out/error file descriptors.
-    #   If false, then accept(2) is called on behalf of the job, and the result is passed via the standard in/out/error descriptors.
+    # <tt>wait [true,false]</tt>
+    # 
+    # This flag corresponds to the "wait" or "nowait" option of inetd. If true, then the listening socket is passed via the standard in/out/error file descriptors.
+    # If false, then accept(2) is called on behalf of the job, and the result is passed via the standard in/out/error descriptors.
     # 
     # @example
     # # set inetdCompatibility
-    # launchd_plist.inetd_compatibility({:wait => true})
+    # launchd_plist.inetd_compatibility { wait true }
     # 
     # # return inetdCompatibility
     # launchd_plist.inetd_compatibility => hash or nil
     #
-    def inetd_compatibility value=nil
+    def inetd_compatibility value=nil, &blk
       key = "inetdCompatibility"
       case value
-      when Hash
-        if value[:wait]
-          @hash[key] = value[:wait]
-        else
-          raise "Invalid value: #{method_name} #{value.inspect}. Should be: #{method_name} :wait => true|false"
-        end
       when nil
-        @hash[key]
+        if block_given?
+          @hash[key] = ::Plist4r::OrderedHash.new
+          @hash[key] = InetdCompatibility.new(@hash[key],&blk).to_hash
+        else
+          @hash[key]
+        end
       else
-        raise "Invalid value: #{method_name} #{value.inspect}. Should be: #{method_name} :wait => true|false"
+        raise "Invalid value: #{method_name} #{value.inspect}. Should be: #{method_name} { wait true|false }"
       end
+
+
     end
     
     class KeepAlive < ArrayDict
       ValidKeys =
       {
-        :bool => %w[SuccessfulExit NetworkState],
-        :bool_or_hash_of_bools => %w[PathState OtherJobEnabled]
+        :bool => %w[SuccessfulExit NetworkState AfterInitialDemand],
+        :bool_or_hash_of_bools => %w[PathState OtherJobEnabled OtherJobActive]
       }
     end
 
@@ -119,7 +129,6 @@ module Plist4r
         @hash[key] = value
       when nil
         if block_given?
-          puts KeepAlive.new(@hash[key],&blk).to_hash
           @hash[key] = ::Plist4r::OrderedHash.new
           @hash[key] = KeepAlive.new(@hash[key],&blk).to_hash
         else
@@ -143,6 +152,39 @@ module Plist4r
     # This optional key is used to specify additional environmental variables to be set before running the job.
     def environment_variables value=nil, &blk
       key = "EnvironmentVariables"
+      case value
+      when Hash
+        value.each do |k,v|
+          unless k.class == String
+            raise "Invalid key: #{method_name}[#{k.inspect}]. Should be of type String"
+          end
+          unless v.class == String
+            raise "Invalid value: #{method_name}[#{k.inspect}] = #{v.inspect}. Should be of type String"
+          end
+        end
+        @hash[key] = value
+      when nil
+        @hash[key]
+      else
+        raise "Invalid value: #{method_name} #{value.inspect}. Should be: #{method_name} { hash_of_strings }"
+      end
+    end
+
+    # Set or return the plist key +UserEnvironmentVariables+
+    #
+    # @example
+    #  # Set user environment variables
+    #  launchd_plist.user_environment_variables({ "VAR1" => "VAL1", "VAR2" => "VAL2" })
+    #
+    #  # Return user environment variables
+    #  launchd_plist.user_environment_variables => { "VAR1" => "VAL1", "VAR2" => "VAL2" }
+    #
+    # @param [Hash <String>] value 
+    # This optional key is used to specify additional user environmental variables to be set before running the job.
+    # UserEnvironmentVariables is not a documented feature of Apple Launchd. So it might not be supported.
+    # If in doubt, use "EnvironmentVariables".
+    def user_environment_variables value=nil, &blk
+      key = "UserEnvironmentVariables"
       case value
       when Hash
         value.each do |k,v|
@@ -296,7 +338,7 @@ module Plist4r
     def soft_resource_limits value=nil, &blk
       key = "SoftResourceLimits"
       if blk
-        @hash[key] ||= ::Plist4r::OrderedHash.new
+        @hash[key] = ::Plist4r::OrderedHash.new
         @hash[key] = ResourceLimits.new(@hash[key],&blk).to_hash
       else
         @hash[key]
@@ -361,7 +403,7 @@ module Plist4r
     def hard_resource_limits value=nil, &blk
       key = "HardResourceLimits"
       if blk
-        @hash[key] ||= ::Plist4r::OrderedHash.new
+        @hash[key] = ::Plist4r::OrderedHash.new
         @hash[key] = ResourceLimits.new(@hash[key],&blk).to_hash
       else
         @hash[key]
@@ -370,7 +412,7 @@ module Plist4r
 
   	class MachServices < ArrayDict
     	class MachService < ArrayDict
-    	  ValidKeys = { :bool => %w[ ResetAtClose HideUntilCheckIn ] }
+    	  ValidKeys = { :bool => %w[ ResetAtClose HideUntilCheckIn DrainMessagesOnCrash ] }
       end
 
   	  def add service, value=nil, &blk
@@ -428,7 +470,7 @@ module Plist4r
     def mach_services value=nil, &blk
       key = "MachServices"
       if blk
-        @hash[key] ||= ::Plist4r::OrderedHash.new
+        @hash[key] = ::Plist4r::OrderedHash.new
         @hash[key] = MachServices.new(@hash[key],&blk).to_hash
       else
         @hash[key]
@@ -439,8 +481,10 @@ module Plist4r
       class Socket < ArrayDict
         ValidKeys =
         {
-          :string  => %w[ SockType SockNodeName SockServiceName SockFamily SockProtocol \
+          :string  => %w[ SockType SockNodeName SockFamily SockProtocol
                           SockPathName SecureSocketWithKey MulticastGroup ],
+
+          :string_or_integer => %w[ SockServiceName ],
 
           :bool    => %w[ SockPassive ],
 
@@ -661,8 +705,8 @@ module Plist4r
     def socket index_or_key=nil, index=nil, &blk
       key = "Sockets"
       if blk
-        @hash[key] ||= ::Plist4r::OrderedHash.new
-        sockets = Sockets.new(@hash[key]).to_hash
+        @hash[key] = ::Plist4r::OrderedHash.new
+        sockets = Sockets.new(@hash[key])
       
         case index_or_key
         when nil
@@ -680,7 +724,7 @@ module Plist4r
         else
           raise "Invalid socket key: #{method_name} #{index_or_key.inspect}. Should be: #{method_name} <socket_key> &blk"
         end
-        @hash[key] = sockets
+        @hash[key] = sockets.to_hash
       else
         @hash[key]
       end
