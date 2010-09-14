@@ -5,13 +5,11 @@ class BrewLaunchd < Formula
   homepage 'http://dreamcat4.github.com/brew-launchd'
 
   def install
-    # A daemon for triggering jobs on a listen TCP port
-    system "ruby", "-Cext", "extconf.rb"
-    system 'make -C ext'
-    bin.install "#{prefix}/ext/launchd-socket-listener-unload"
-    
-    prefix.install Dir['*']
+    # main files
+    prefix.install Dir['*'] - ["ext", "features", "spec"]
     bin.install    Dir["bin/*"]
+
+    # man page
     man1.install   gzip("#{prefix}/man1/brew-launchd.1")
   end
 
