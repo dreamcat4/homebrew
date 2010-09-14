@@ -74,9 +74,9 @@ class FormulaPlist < Plist4r::Plist
   def method_missing method_sym, *args, &blk
     if @formula.respond_to?(method_sym)
       if block_given?
-        @formula.instance_eval "#{method_sym} *args, &blk"
+        eval "@formula.#{method_sym} *args, &blk"
       else
-        @formula.instance_eval "#{method_sym} *args"
+        eval "@formula.#{method_sym} *args"
       end
     else
       super
