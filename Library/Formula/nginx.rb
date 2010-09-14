@@ -50,7 +50,6 @@ class Nginx < Formula
     system "make install"
 
     launchd_plist "org.nginx" do
-      # launchd needs 'daemon off;' in nginx.conf
       run_at_load true; keep_alive { network_state true }
       program_arguments ["#{sbin}/nginx","-g","daemon off;"]
       working_directory "#{HOMEBREW_PREFIX}"
