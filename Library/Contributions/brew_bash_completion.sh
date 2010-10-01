@@ -12,7 +12,8 @@ _brew_to_completion()
         local actions="--cache --config --prefix cat cleanup configure create
             deps doctor edit home info install link list log outdated prune
             remove search unlink update uses"
-        local ext=$($(which ls) $(brew --repository)/Library/Contributions/examples |
+        # we escape \ls to protect against user aliases
+        local ext=$(\ls $(brew --repository)/Library/Contributions/examples |
                     sed -e "s/\.rb//g" -e "s/brew-//g")
         COMPREPLY=( $(compgen -W "${actions} ${ext}" -- ${cur}) )
         return
@@ -29,14 +30,14 @@ _brew_to_completion()
     case "$prev" in
     # Commands that take a formula
     cat|deps|edit|fetch|home|homepage|info|install|log|options|uses)
-        local ff=$($(which ls) $(brew --repository)/Library/Formula | sed "s/\.rb//g")
-        local af=$($(which ls) $(brew --repository)/Library/Aliases 2> /dev/null | sed "s/\.rb//g")
+        local ff=$(\ls $(brew --repository)/Library/Formula | sed "s/\.rb//g")
+        local af=$(\ls $(brew --repository)/Library/Aliases 2> /dev/null | sed "s/\.rb//g")
         COMPREPLY=( $(compgen -W "${ff} ${af}" -- ${cur}) )
         return
         ;;
     # Commands that take an existing brew
     abv|cleanup|link|list|ln|ls|remove|rm|uninstall|unlink|start|stop|restart)
-        COMPREPLY=( $(compgen -W "$($(which ls) $(brew --cellar))" -- ${cur}) )
+        COMPREPLY=( $(compgen -W "$(\ls $(brew --cellar))" -- ${cur}) )
         return
         ;;
     esac
